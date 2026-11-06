@@ -64,9 +64,15 @@ variable "datastore_id" {
 }
 
 variable "network_bridge" {
-  description = "Bridge réseau des VM (sur Scaleway, souvent un bridge privé NATé comme vmbr1)."
+  description = "Bridge réseau des VM (vmbr1 : bridge interne VLAN-aware)."
   type        = string
   default     = "vmbr1"
+}
+
+variable "vlan_id" {
+  description = "Tag VLAN des VM sur le bridge (null = pas de tag)."
+  type        = number
+  default     = null
 }
 
 variable "network_cidr" {
@@ -82,7 +88,7 @@ variable "ip_offset" {
 }
 
 variable "gateway" {
-  description = "Passerelle des VM en adressage statique (souvent l'IP du host sur le bridge)."
+  description = "Passerelle des VM en adressage statique (routeur du VLAN)."
   type        = string
   default     = ""
 }

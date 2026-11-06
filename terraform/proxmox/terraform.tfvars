@@ -5,9 +5,13 @@ proxmox_node   = "proxmox-baremetal"
 template_vm_id = 9000 # créé par scripts/proxmox/create-template.sh
 vm_id_start    = 200
 datastore_id   = "local" # stockage "dir" : disques en qcow2
-network_bridge = "vmbr1" # bridge privé NATé des VM
 
-# Adressage statique (laisser network_cidr = "" pour du DHCP)
-network_cidr = "10.10.10.0/24"
-ip_offset    = 100          # -> 10.10.10.100, .101, ...
-gateway      = "10.10.10.1" # IP du host Proxmox sur vmbr1
+# Réseau : vmbr1 = bridge interne VLAN-aware ("LAN CONSTRUX")
+network_bridge = "vmbr1"
+vlan_id        = null # À DÉFINIR : VLAN des VM déployées
+
+# Adressage : network_cidr = "" -> DHCP (si le routeur du VLAN en fournit un)
+# Sinon, statique : network_cidr = "10.x.x.0/24", ip_offset et gateway = routeur du VLAN
+network_cidr = ""
+ip_offset    = 100
+gateway      = ""
