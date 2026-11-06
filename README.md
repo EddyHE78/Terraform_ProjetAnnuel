@@ -107,9 +107,16 @@ Dans les deux cas, `PROXMOX_ENDPOINT` doit pointer vers l'IP **privée** du host
 | Secret | `WG_CONFIG` | config WireGuard client (option A) |
 | Secret | `TS_OAUTH_CLIENT_ID` / `TS_OAUTH_SECRET` | option B |
 
-### 5. Branche par défaut
+### 5. Branches
 
-`dev` est la branche principale : *Settings → General → Default branch → `dev`*. Le workflow manuel n'apparaît dans l'onglet Actions qu'une fois présent sur la branche par défaut.
+| Branche | Rôle |
+|---|---|
+| `main` | Branche principale (par défaut), stable. Mise à jour uniquement par merge `dev → main`, à la main. |
+| `dev` | Branche de travail : tous les changements arrivent ici. |
+
+- Branche par défaut : *Settings → General → Default branch → `main`*.
+- Conseillé : protéger `main` (*Settings → Branches*) en exigeant une PR et le check `Terraform CI` vert.
+- Le bouton *Run workflow* n'apparaît qu'une fois `deploy.yml` présent sur `main`. Ensuite, le sélecteur de branche du formulaire permet de lancer la version de `dev` pour tester.
 
 ## Utilisation
 
