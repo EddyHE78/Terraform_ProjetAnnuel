@@ -1,16 +1,11 @@
-name: Déployer des VM
+name: Déployer des VM Proxmox
 
-# Lancement manuel : onglet Actions > "Déployer des VM" > Run workflow.
+# Lancement manuel : onglet Actions > "Déployer des VM Proxmox" > Run workflow.
 # Le formulaire ci-dessous sert de mini-dashboard ; un vrai dashboard pourra
 # plus tard déclencher ce même workflow via l'API GitHub (workflow_dispatch).
 on:
   workflow_dispatch:
     inputs:
-      target:
-        description: "Où déployer ?"
-        type: choice
-        options: [proxmox, aws, both]
-        default: proxmox
       action:
         description: "Action Terraform"
         type: choice
@@ -32,7 +27,11 @@ on:
 
 permissions:
   contents: read
-  id-token: write # OIDC vers AWS (stack aws uniquement)
+
+# Un seul run à la fois (protège le state et le tunnel VPN).
+concurrency:
+  group: terraform-proxmox
+  cancel-in-progress: false
 
 env:
   TF_VERSION: "1.17.1"
@@ -41,23 +40,13 @@ env:
 
 jobs:
   terraform:
-    name: ${{ inputs.action }} ${{ matrix.stack }}
+    name: ${{ inputs.action }} proxmox
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
-    strategy:
-      fail-fast: false
-      matrix:
-        stack: ${{ fromJSON(inputs.target == 'both' && '["proxmox","aws"]' || format('["{0}"]', inputs.target)) }}
-
-    # Un seul run à la fois par stack (protège le state et le tunnel VPN).
-    concurrency:
-      group: terraform-${{ matrix.stack }}
-      cancel-in-progress: false
-
     defaults:
       run:
-        working-directory: terraform/${{ matrix.stack }}
+        working-directory: terraform/proxmox
 
     env:
       # Variables Terraform issues du formulaire
@@ -65,7 +54,6 @@ jobs:
       TF_VAR_vm_size: ${{ inputs.vm_size }}
       TF_VAR_name_prefix: ${{ inputs.name_prefix }}
       TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY }}
-      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'eu-west-3' }}
       # Provider Proxmox (bpg) : lus depuis l'environnement
       PROXMOX_VE_ENDPOINT: ${{ secrets.PROXMOX_ENDPOINT }}
       PROXMOX_VE_API_TOKEN: ${{ secrets.PROXMOX_API_TOKEN }}
@@ -75,7 +63,6 @@ jobs:
       SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
       SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
       ACTION: ${{ inputs.action }}
-      STACK: ${{ matrix.stack }}
 
     steps:
       - uses: actions/checkout@v4
@@ -83,32 +70,19 @@ jobs:
       - name: Vérifier la configuration
         run: |
           missing=0
-          [ -n "$TF_VAR_ssh_public_key" ] || { echo "::error::Variable GitHub SSH_PUBLIC_KEY manquante"; missing=1; }
-          [ -n "$TF_STATE_BUCKET" ]       || { echo "::error::Variable GitHub TF_STATE_BUCKET manquante"; missing=1; }
-          [ -n "$SCW_ACCESS_KEY" ]        || { echo "::error::Secret SCW_ACCESS_KEY manquant"; missing=1; }
-          [ -n "$SCW_SECRET_KEY" ]        || { echo "::error::Secret SCW_SECRET_KEY manquant"; missing=1; }
-          if [ "$STACK" = "aws" ]; then
-            [ -n "${{ vars.AWS_ROLE_ARN }}" ] || { echo "::error::Variable GitHub AWS_ROLE_ARN manquante"; missing=1; }
-          fi
-          if [ "$STACK" = "proxmox" ]; then
-            [ -n "$PROXMOX_VE_ENDPOINT" ]  || { echo "::error::Secret PROXMOX_ENDPOINT manquant"; missing=1; }
-            [ -n "$PROXMOX_VE_API_TOKEN" ] || { echo "::error::Secret PROXMOX_API_TOKEN manquant"; missing=1; }
-          fi
+          [ -n "$TF_VAR_ssh_public_key" ]   || { echo "::error::Variable GitHub SSH_PUBLIC_KEY manquante"; missing=1; }
+          [ -n "$TF_STATE_BUCKET" ]         || { echo "::error::Variable GitHub TF_STATE_BUCKET manquante"; missing=1; }
+          [ -n "$SCW_ACCESS_KEY" ]          || { echo "::error::Secret SCW_ACCESS_KEY manquant"; missing=1; }
+          [ -n "$SCW_SECRET_KEY" ]          || { echo "::error::Secret SCW_SECRET_KEY manquant"; missing=1; }
+          [ -n "$PROXMOX_VE_ENDPOINT" ]     || { echo "::error::Secret PROXMOX_ENDPOINT manquant"; missing=1; }
+          [ -n "$PROXMOX_VE_API_TOKEN" ]    || { echo "::error::Secret PROXMOX_API_TOKEN manquant"; missing=1; }
           exit $missing
-
-      - name: Identifiants AWS (OIDC)
-        if: matrix.stack == 'aws'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION || 'eu-west-3' }}
-          role-session-name: gha-${{ matrix.stack }}-${{ github.run_id }}
 
       # ---------------- Accès réseau à Proxmox (Scaleway) ----------------
       # Variable GitHub VPN_TYPE : "wireguard" (défaut) ou "tailscale".
 
       - name: VPN WireGuard
-        if: matrix.stack == 'proxmox' && vars.VPN_TYPE != 'tailscale'
+        if: vars.VPN_TYPE != 'tailscale'
         env:
           WG_CONFIG: ${{ secrets.WG_CONFIG }}
         run: |
@@ -120,7 +94,7 @@ jobs:
           sudo wg-quick up wg0
 
       - name: VPN Tailscale
-        if: matrix.stack == 'proxmox' && vars.VPN_TYPE == 'tailscale'
+        if: vars.VPN_TYPE == 'tailscale'
         uses: tailscale/github-action@v3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -128,7 +102,6 @@ jobs:
           tags: tag:ci
 
       - name: Tester l'API Proxmox
-        if: matrix.stack == 'proxmox'
         run: |
           url="${PROXMOX_VE_ENDPOINT%/}/api2/json/version"
           for i in 1 2 3 4 5 6; do
@@ -161,7 +134,7 @@ jobs:
           terraform plan $extra -out=tfplan
           terraform show -no-color tfplan > plan.txt
           {
-            echo "## Plan \`$STACK\` ($ACTION)"
+            echo "## Plan Proxmox ($ACTION)"
             echo "<details><summary>Voir le plan</summary>"
             echo
             echo '```'
@@ -177,15 +150,15 @@ jobs:
       - name: Résumé des VM
         if: inputs.action != 'plan'
         run: |
-          terraform output -json > "outputs-${STACK}.json"
+          terraform output -json > outputs.json
           {
-            echo "## VM \`$STACK\`"
-            if [ "$(jq '.vms.value | length' "outputs-${STACK}.json")" = "0" ]; then
+            echo "## VM Proxmox"
+            if [ "$(jq '.vms.value | length' outputs.json)" = "0" ]; then
               echo "_Aucune VM._"
             else
-              echo "| Nom | Détails |"
-              echo "|---|---|"
-              jq -r '.vms.value | to_entries[] | "| \(.key) | \(.value | to_entries | map("\(.key): `\(.value)`") | join("<br>")) |"' "outputs-${STACK}.json"
+              echo "| Nom | VMID | IP |"
+              echo "|---|---|---|"
+              jq -r '.vms.value | to_entries[] | "| \(.key) | \(.value.vm_id) | `\(.value.ip)` |"' outputs.json
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -194,10 +167,10 @@ jobs:
         if: inputs.action != 'plan'
         uses: actions/upload-artifact@v4
         with:
-          name: outputs-${{ matrix.stack }}
-          path: terraform/${{ matrix.stack }}/outputs-${{ matrix.stack }}.json
+          name: outputs-proxmox
+          path: terraform/proxmox/outputs.json
           retention-days: 30
 
       - name: Couper le VPN WireGuard
-        if: always() && matrix.stack == 'proxmox' && vars.VPN_TYPE != 'tailscale'
+        if: always() && vars.VPN_TYPE != 'tailscale'
         run: sudo wg-quick down wg0 || true

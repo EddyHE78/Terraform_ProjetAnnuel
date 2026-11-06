@@ -25,13 +25,9 @@ jobs:
 
   validate:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        dir: [terraform/proxmox, terraform/aws, bootstrap/aws]
     defaults:
       run:
-        working-directory: ${{ matrix.dir }}
+        working-directory: terraform/proxmox
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3

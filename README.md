@@ -1,32 +1,29 @@
 # Terraform_ProjetAnnuel
 
-Projet annuel : déploiement de VM à la demande sur **Proxmox** (bare metal Scaleway) et/ou **AWS**, avec Terraform exécuté par **GitHub Actions** (runners GitHub-hosted).
+Projet annuel : déploiement de VM à la demande sur **Proxmox** (bare metal Scaleway), avec Terraform exécuté par **GitHub Actions** (runners GitHub-hosted).
 
 ```
 GitHub Actions (runner GitHub-hosted)
   ├── State Terraform ─────────────► Scaleway Object Storage (bucket S3-compatible)
-  ├── VPN (WireGuard ou Tailscale) ─► API Proxmox (Scaleway) ─► VM clonées depuis un template cloud-init
-  └── OIDC ────────────────────────► AWS : rôle IAM ─► EC2            (plus tard)
+  └── VPN (WireGuard ou Tailscale) ─► API Proxmox (Scaleway) ─► VM clonées depuis un template cloud-init
 ```
 
 ## Arborescence
 
 | Chemin | Rôle |
 |---|---|
-| `.github/workflows/deploy.yml` | Workflow manuel : cible, action (plan/apply/destroy), nombre et taille de VM |
+| `.github/workflows/deploy.yml` | Workflow manuel : action (plan/apply/destroy), nombre et taille de VM |
 | `.github/workflows/terraform-ci.yml` | `fmt` + `validate` sur chaque PR / push vers `main` et `dev` |
 | `terraform/proxmox/` | VM Proxmox (provider `bpg/proxmox`) |
-| `terraform/aws/` | VPC + instances EC2 Ubuntu 24.04 |
 | `scripts/proxmox/` | Création du template cloud-init et du token d'API Proxmox |
-| `bootstrap/aws/` | À lancer **une fois** en local pour AWS : OIDC GitHub + rôle IAM |
 
 Gabarits (`vm_size`) :
 
-| Taille | Proxmox | AWS |
-|---|---|---|
-| small | 1 vCPU / 1 Go / 10 Go | t3.micro |
-| medium | 2 vCPU / 2 Go / 20 Go | t3.small |
-| large | 4 vCPU / 4 Go / 40 Go | t3.medium |
+| Taille | vCPU | RAM | Disque |
+|---|---|---|---|
+| small | 1 | 1 Go | 10 Go |
+| medium | 2 | 2 Go | 20 Go |
+| large | 4 | 4 Go | 40 Go |
 
 ## Branches
 
@@ -37,7 +34,7 @@ Gabarits (`vm_size`) :
 
 Le bouton *Run workflow* utilise la version de `deploy.yml` présente sur `main`. Le sélecteur de branche du formulaire permet de lancer celle de `dev` pour tester.
 
-## Mise en place : Proxmox
+## Mise en place
 
 ### 1. State Terraform : bucket Scaleway
 
@@ -46,7 +43,7 @@ Dans la console Scaleway :
 1. *Object Storage → Create bucket* : région **Paris (fr-par)**, nom unique (ex : `tfstate-projet-annuel-<suffixe>`), visibilité **privée**. Active le *versioning* dans les paramètres du bucket.
 2. *IAM → API keys → Generate API key*. Associe-la à une application ou un utilisateur qui a la permission `ObjectStorageFullAccess` sur le projet du bucket. Garde l'*Access Key* et la *Secret Key*.
 
-Si tu crées le bucket dans une autre région, adapte `region` et `endpoints` dans les `versions.tf` des deux stacks.
+Si tu crées le bucket dans une autre région, adapte `region` et `endpoints` dans `terraform/proxmox/versions.tf`.
 
 ### 2. Proxmox : template et token
 
@@ -114,35 +111,25 @@ Dans les deux cas, `PROXMOX_ENDPOINT` doit pointer vers l'IP **privée** du host
 
 ### 5. Premier test
 
-*Actions → Déployer des VM → Run workflow* :
+*Actions → Déployer des VM Proxmox → Run workflow* :
 
-1. `target=proxmox`, `action=plan` : valide le bucket, le VPN et le token.
+1. `action=plan` : valide le bucket, le VPN et le token.
 2. `action=apply` avec `vm_count=1`, puis `action=destroy`.
-
-## Mise en place : AWS (plus tard)
-
-1. En local, avec des identifiants AWS administrateur :
-   ```bash
-   cd bootstrap/aws && terraform init && terraform apply
-   ```
-   Si le fournisseur OIDC GitHub existe déjà dans ton compte, ajoute `-var="create_oidc_provider=false"`.
-2. Variables GitHub : `AWS_ROLE_ARN` (sortie `aws_role_arn`) et `AWS_REGION` (`eu-west-3` par défaut).
-3. Run workflow avec `target=aws`. Le state AWS va dans le même bucket Scaleway, sous la clé `aws/`.
 
 ## Utilisation
 
-*Actions → Déployer des VM → Run workflow*, puis choisis :
+*Actions → Déployer des VM Proxmox → Run workflow*, puis choisis :
 
-- **target** : `proxmox`, `aws` ou `both`
 - **action** : `plan` (aperçu seul), `apply` ou `destroy`
 - **vm_count**, **vm_size**, **name_prefix**
 
-Le résumé du run affiche le plan et le tableau des VM (nom, ID, IP). Les sorties JSON sont publiées en artefact `outputs-<stack>`.
-Relancer avec un `vm_count` plus petit supprime les VM en trop. `destroy` supprime tout ce que gère la stack.
+Le résumé du run affiche le plan et le tableau des VM (nom, ID, IP). Les sorties JSON sont publiées en artefact `outputs-proxmox`.
+Relancer avec un `vm_count` plus petit supprime les VM en trop. `destroy` supprime toutes les VM gérées par Terraform.
 
 ## Pistes pour la suite
 
-- **Dashboard** : une page qui déclenche `deploy.yml` via l'API GitHub (`POST /repos/{owner}/{repo}/actions/workflows/deploy.yml/dispatches`) et lit les artefacts `outputs-*`.
+- **Dashboard** : une page qui déclenche `deploy.yml` via l'API GitHub (`POST /repos/{owner}/{repo}/actions/workflows/deploy.yml/dispatches`) et lit l'artefact `outputs-proxmox`.
 - **Validation manuelle** : un *environment* GitHub avec reviewers obligatoires avant `apply`/`destroy`.
 - **Post-install** : Ansible lancé après l'apply pour configurer les VM.
-- Commiter les fichiers `.terraform.lock.hcl` pour figer les versions des providers.
+- Commiter le fichier `.terraform.lock.hcl` pour figer la version du provider.
+- **AWS** : une première version (VPC + EC2, OIDC) existe dans l'historique git (commit `459d259`), à réintégrer plus tard.

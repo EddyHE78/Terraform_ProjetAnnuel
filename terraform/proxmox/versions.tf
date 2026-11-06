@@ -11,7 +11,7 @@ terraform {
   # State stocké sur Scaleway Object Storage (compatible S3), bucket en fr-par.
   # Le bucket et les clés API Scaleway sont passés par le workflow
   # (terraform init -backend-config=...). Pas de verrou natif : le workflow
-  # sérialise les runs par stack (concurrency), ce qui suffit ici.
+  # sérialise les runs (concurrency), ce qui suffit ici.
   backend "s3" {
     key    = "proxmox/terraform.tfstate"
     region = "fr-par"
