@@ -1,44 +1,6 @@
 data "aws_caller_identity" "current" {}
 
 # ---------------------------------------------------------------------------
-# Bucket S3 pour les states Terraform (verrouillage natif via use_lockfile)
-# ---------------------------------------------------------------------------
-resource "aws_s3_bucket" "tfstate" {
-  bucket = var.state_bucket_name
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-resource "aws_s3_bucket_versioning" "tfstate" {
-  bucket = aws_s3_bucket.tfstate.id
-
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "tfstate" {
-  bucket = aws_s3_bucket.tfstate.id
-
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "tfstate" {
-  bucket = aws_s3_bucket.tfstate.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-# ---------------------------------------------------------------------------
 # OIDC GitHub -> AWS
 # ---------------------------------------------------------------------------
 resource "aws_iam_openid_connect_provider" "github" {
@@ -80,25 +42,6 @@ resource "aws_iam_role" "github_actions" {
   name                 = var.role_name
   assume_role_policy   = data.aws_iam_policy_document.github_trust.json
   max_session_duration = 3600
-}
-
-# Accès au bucket de state uniquement.
-data "aws_iam_policy_document" "tfstate" {
-  statement {
-    actions   = ["s3:ListBucket"]
-    resources = [aws_s3_bucket.tfstate.arn]
-  }
-
-  statement {
-    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-    resources = ["${aws_s3_bucket.tfstate.arn}/*"]
-  }
-}
-
-resource "aws_iam_role_policy" "tfstate" {
-  name   = "terraform-state"
-  role   = aws_iam_role.github_actions.id
-  policy = data.aws_iam_policy_document.tfstate.json
 }
 
 # Droits pour créer les VM EC2 et le réseau associé (VPC, SG, key pair…).

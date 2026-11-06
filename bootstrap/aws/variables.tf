@@ -1,5 +1,5 @@
 variable "aws_region" {
-  description = "Région AWS du bucket de state (et région par défaut des déploiements)."
+  description = "Région AWS utilisée par le provider (IAM est global)."
   type        = string
   default     = "eu-west-3" # Paris
 }
@@ -8,11 +8,6 @@ variable "github_repository" {
   description = "Dépôt GitHub autorisé à endosser le rôle, au format owner/repo (sensible à la casse)."
   type        = string
   default     = "EddyHE78/Terraform_ProjetAnnuel"
-}
-
-variable "state_bucket_name" {
-  description = "Nom du bucket S3 de state. Doit être unique au niveau mondial."
-  type        = string
 }
 
 variable "create_oidc_provider" {

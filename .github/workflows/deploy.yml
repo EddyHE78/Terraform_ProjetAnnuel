@@ -32,7 +32,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # OIDC vers AWS (state S3 + déploiement EC2)
+  id-token: write # OIDC vers AWS (stack aws uniquement)
 
 env:
   TF_VERSION: "1.17.1"
@@ -70,6 +70,10 @@ jobs:
       PROXMOX_VE_ENDPOINT: ${{ secrets.PROXMOX_ENDPOINT }}
       PROXMOX_VE_API_TOKEN: ${{ secrets.PROXMOX_API_TOKEN }}
       PROXMOX_VE_INSECURE: ${{ vars.PROXMOX_INSECURE || 'true' }}
+      # State Terraform : Scaleway Object Storage
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
+      SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
       ACTION: ${{ inputs.action }}
       STACK: ${{ matrix.stack }}
 
@@ -79,17 +83,21 @@ jobs:
       - name: Vérifier la configuration
         run: |
           missing=0
-          [ -n "$TF_VAR_ssh_public_key" ]      || { echo "::error::Variable GitHub SSH_PUBLIC_KEY manquante"; missing=1; }
-          [ -n "${{ vars.AWS_ROLE_ARN }}" ]    || { echo "::error::Variable GitHub AWS_ROLE_ARN manquante"; missing=1; }
-          [ -n "${{ vars.TF_STATE_BUCKET }}" ] || { echo "::error::Variable GitHub TF_STATE_BUCKET manquante"; missing=1; }
+          [ -n "$TF_VAR_ssh_public_key" ] || { echo "::error::Variable GitHub SSH_PUBLIC_KEY manquante"; missing=1; }
+          [ -n "$TF_STATE_BUCKET" ]       || { echo "::error::Variable GitHub TF_STATE_BUCKET manquante"; missing=1; }
+          [ -n "$SCW_ACCESS_KEY" ]        || { echo "::error::Secret SCW_ACCESS_KEY manquant"; missing=1; }
+          [ -n "$SCW_SECRET_KEY" ]        || { echo "::error::Secret SCW_SECRET_KEY manquant"; missing=1; }
+          if [ "$STACK" = "aws" ]; then
+            [ -n "${{ vars.AWS_ROLE_ARN }}" ] || { echo "::error::Variable GitHub AWS_ROLE_ARN manquante"; missing=1; }
+          fi
           if [ "$STACK" = "proxmox" ]; then
             [ -n "$PROXMOX_VE_ENDPOINT" ]  || { echo "::error::Secret PROXMOX_ENDPOINT manquant"; missing=1; }
             [ -n "$PROXMOX_VE_API_TOKEN" ] || { echo "::error::Secret PROXMOX_API_TOKEN manquant"; missing=1; }
           fi
           exit $missing
 
-      # Le state de chaque stack est sur S3 : AWS est nécessaire même pour Proxmox.
       - name: Identifiants AWS (OIDC)
+        if: matrix.stack == 'aws'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
@@ -142,8 +150,9 @@ jobs:
       - name: terraform init
         run: |
           terraform init \
-            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
-            -backend-config="region=${{ vars.AWS_REGION || 'eu-west-3' }}"
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="access_key=${SCW_ACCESS_KEY}" \
+            -backend-config="secret_key=${SCW_SECRET_KEY}"
 
       - name: terraform plan
         run: |

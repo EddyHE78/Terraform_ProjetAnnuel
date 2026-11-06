@@ -1,8 +1,8 @@
 # Bootstrap à exécuter UNE SEULE FOIS en local, avec des identifiants AWS admin.
-# Il crée ce dont GitHub Actions a besoin :
-#   - le bucket S3 qui stocke les states Terraform (proxmox + aws)
+# Il crée ce dont GitHub Actions a besoin pour déployer sur AWS :
 #   - le fournisseur d'identité OIDC GitHub
 #   - le rôle IAM que les workflows endossent (aucune clé d'accès dans GitHub)
+# Les states Terraform sont sur Scaleway Object Storage, pas sur AWS.
 #
 # Le state de ce bootstrap reste en local (terraform.tfstate, ignoré par git) :
 # garde-le précieusement ou importe les ressources si tu le perds.
