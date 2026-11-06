@@ -4,8 +4,8 @@
 proxmox_node   = "pve" # hostname du nœud Proxmox
 template_vm_id = 9000  # créé par scripts/proxmox/create-template.sh
 vm_id_start    = 200
-datastore_id   = "local-lvm" # ou local-zfs selon l'installation
-network_bridge = "vmbr1"     # bridge privé NATé des VM
+datastore_id   = "local" # stockage "dir" : disques en qcow2
+network_bridge = "vmbr1" # bridge privé NATé des VM
 
 # Adressage statique (laisser network_cidr = "" pour du DHCP)
 network_cidr = "10.10.10.0/24"

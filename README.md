@@ -51,7 +51,7 @@ Sur le host Proxmox, en root :
 
 ```bash
 # Template Ubuntu 24.04 cloud-init (VMID 9000) avec qemu-guest-agent
-STORAGE=local-lvm BRIDGE=vmbr1 bash scripts/proxmox/create-template.sh
+STORAGE=local BRIDGE=vmbr1 bash scripts/proxmox/create-template.sh
 
 # Utilisateur terraform@pve + token "github" (le secret s'affiche une seule fois)
 bash scripts/proxmox/create-api-token.sh
