@@ -1,0 +1,22 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Fichiers de variables sensibles (ne jamais commiter)
+*.secret.tfvars
+secret.auto.tfvars
+
+# WireGuard / clés
+*.conf.secret
+*.key
